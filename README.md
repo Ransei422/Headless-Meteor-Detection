@@ -31,7 +31,7 @@ This Python script provides a real-time meteor detection system using OpenCV. It
    It's highly recommended to use a Python virtual environment.  
    python3 \-m venv venv  
    source venv/bin/activate  \# On Windows: venv\\Scripts\\activate  
-   pip install opencv-python numpy
+   pip install opencv-python numpy schedule
 
 ## **Configuration**
 
