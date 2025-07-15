@@ -4,6 +4,7 @@ This Python script provides a real-time meteor detection system using OpenCV. It
 
 ## **Features**
 
+* **Scheduled start and end.
 * **Real-time Video Processing**: Connects to RTSP streams for continuous monitoring.  
 * **MP4 File Processing**: Can also process pre-recorded MP4 video files.  
 * **Meteor Detection**: Utilizes multiple subtraction algorithms and Hough Line Transform to identify linear patterns indicative of meteors.  
@@ -20,6 +21,7 @@ This Python script provides a real-time meteor detection system using OpenCV. It
 * Python 3.x  
 * OpenCV (opencv-python)  
 * NumPy
+* Schedule
 
 ## **Installation**
 
@@ -45,6 +47,9 @@ CONFIG\_EXPOSURE\_TIME \= 5 \# Exposure time in seconds for frame accumulation
 
 \# Output directory for saved images and videos  
 CONFIG\_OUTPUT\_DIRECTORY \= "/home/suomi/Desktop/meteor-detect/output\_files" \# Recommended: Use an absolute path
+
+\# Start time for observation (JST) "hhmm" \=\> (ex. 2000 for 8:00 PM)  
+CONFIG_PLANED_START = "2000"
 
 \# End time for observation (JST) "hhmm" \=\> (ex. 0500 for 5:00 AM)  
 CONFIG\_PLANED\_END \= "0500"
