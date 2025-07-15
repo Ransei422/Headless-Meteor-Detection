@@ -26,7 +26,7 @@ CONFIG_VIDEOFILE_PATH = None
 CONFIG_EXPOSURE_TIME = 8
 
 # INSERT output file's directory, None == current dir
-CONFIG_OUTPUT_DIRECTORY = "/home/suomi/Desktop/meteor-detect/output_files"
+CONFIG_OUTPUT_DIRECTORY = "/home/user01/Desktop/meteor-detect/output_files"
 
 # EDIT start of observation (2000 = 20:00 )
 CONFIG_PLANED_START = "2000"
