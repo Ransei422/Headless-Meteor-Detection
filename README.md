@@ -124,7 +124,3 @@ CONFIG\_USE\_BACKGROUND\_SUB\_METHOD \= False
   * **Stronger Blurring**: Increase the kernel size for cv2.GaussianBlur applied before background subtraction (e.g., (7, 7\) or (9, 9)).  
   * **More Aggressive Morphological Operations**: Use larger kernels for cv2.MORPH\_OPEN and cv2.MORPH\_CLOSE after background subtraction to clean up noise (e.g., (5, 5\) for open, (10, 10\) for close).  
   * **Contour Filtering**: Implement additional filtering based on cv2.findContours results (e.g., cv2.contourArea, aspect ratio, solidity) to discard non-meteor shapes.
-
-## **License**
-
-This project is open-source and available under the MIT License.
