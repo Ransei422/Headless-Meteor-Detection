@@ -187,11 +187,8 @@ class AtomCamera:
         else:
             output_dir = Path('.')
         self.output_dir = output_dir
-
-        # MP4ファイル再生の場合を区別する。
         self.mp4 = Path(video_url).suffix == '.mp4'
 
-        # 終了時刻を設定する。
         now = datetime.now()
         t = datetime.strptime(end_time, "%H%M")
         self.end_time = datetime(
