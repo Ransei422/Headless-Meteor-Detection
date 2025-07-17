@@ -8,7 +8,7 @@ This Python script provides a real-time meteor detection system using OpenCV. It
 * **Real-time Video Processing**: Connects to RTSP streams for continuous monitoring.  
 * **MP4 File Processing**: Can also process pre-recorded MP4 video files.  
 * **Meteor Detection**: Utilizes multiple subtraction algorithms and Hough Line Transform to identify linear patterns indicative of meteors.  
-  Configurable with: \[CONFIG\_USE\_COMPLEX\_DIFFERENCE\] and \[CONFIG\_USE\_BACKGROUND\_SUB\_METHOD\] flags.  
+  Configurable with: \[CONFIG\_USE\_COMPLEX\_DIFFERENCE\] flag.  
 * **Event Saving**: Automatically saves composite images and video clips of detected meteor events.  
 * **Robust Camera Connection**: Implements exponential backoff for connection retries to handle network instability.  
 * **Configurable Parameters**: Easily adjust detection sensitivity, exposure time, output directory, and more via configuration variables.  
@@ -70,8 +70,6 @@ CONFIG\_HTTP\_SERVER\_PORT \= 8000 \# Port for the HTTP server
 \# Enable Complex difference function  
 CONFIG\_USE\_COMPLEX\_DIFFERENCE \= False (\*makes detection more sensitive)
 
-\# Enable Advanced Background extraction (\*experimental; do not use during daylight)  
-CONFIG\_USE\_BACKGROUND\_SUB\_METHOD \= False
 
 **Important Notes:**
 
@@ -94,7 +92,7 @@ CONFIG\_USE\_BACKGROUND\_SUB\_METHOD \= False
 1. **Initialization**: The AtomCam class connects to the video source and sets up parameters.  
 2. **Frame Capture (queue\_streaming thread)**: A dedicated thread continuously reads frames from the camera/video file and puts them into a queue. It handles connection retries with exponential backoff.  
 3. **Frame Processing (dequeue\_streaming loop)**: The main thread retrieves frames from the queue in batches, corresponding to the CONFIG\_EXPOSURE\_TIME.  
-4. **Difference and Background Subtraction**: Depending on used flags, script will run simple difference/complex difference and background subtraction for each frame, a background subtractor (MOG2) is applied to generate a foreground mask, highlighting moving objects.  
+4. **Difference **: Depending on used flags, script will run simple difference/complex difference for each frame.
 5. **Masking**: A pre-defined mask is applied to ignore the camera's timestamp overlay.  
 6. **Temporal Accumulation**: Foreground masks over the exposure time are combined to create a composite image that emphasizes trails.  
 7. **Meteor Detection**: The detect function applies Gaussian blur, Canny edge detection, and cv2.HoughLinesP to find linear patterns (potential meteors) in the processed difference image.  
@@ -118,9 +116,5 @@ CONFIG\_USE\_BACKGROUND\_SUB\_METHOD \= False
   * **Check RTSP URL**: Verify the full RTSP URL (e.g., rtsp://username:password@IP/live). The default rtsp://6199:4003@IP/live is specific to Atom Cam.  
   * **Firewall**: Ensure no firewall (on your machine or network) is blocking the connection.  
   * **Camera Settings**: Confirm the camera's RTSP server is enabled.  
-* **Too Many False Positives (Daylight)**:  
-  * Background subtraction (CONFIG\_USE\_BACKGROUND\_SUB\_METHOD flag) struggles with dynamic backgrounds (trees, water, shadows, clouds).  
-  * **Adjust MOG2 parameters**: In AtomCam.\_\_init\_\_, experiment with higher history (e.g., 1000 to 2000\) and varThreshold (e.g., 32 to 64\) in cv2.createBackgroundSubtractorMOG2.  
-  * **Stronger Blurring**: Increase the kernel size for cv2.GaussianBlur applied before background subtraction (e.g., (7, 7\) or (9, 9)).  
-  * **More Aggressive Morphological Operations**: Use larger kernels for cv2.MORPH\_OPEN and cv2.MORPH\_CLOSE after background subtraction to clean up noise (e.g., (5, 5\) for open, (10, 10\) for close).  
-  * **Contour Filtering**: Implement additional filtering based on cv2.findContours results (e.g., cv2.contourArea, aspect ratio, solidity) to discard non-meteor shapes.
+* **Too Many False Positives**:  
+  * Adjust CONFIG_MIN_HOGH_LINES parameter with larger number
