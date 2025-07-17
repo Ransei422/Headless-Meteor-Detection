@@ -22,20 +22,21 @@ CONFIG_ATOM_CAM_IP = "192.168.0.45"
 # INSERT path to video file if proccessing files (+ ".mp4")
 CONFIG_VIDEOFILE_PATH = None
 
-# EDIT Camera's exposure time in seconds
+# EDIT Camera's exposure time in seconds: eat CPU Usage
 CONFIG_EXPOSURE_TIME = 8
 
 # INSERT output file's directory, None == current dir
-CONFIG_OUTPUT_DIRECTORY = "/home/user01/Desktop/meteor-detect/output_files"
+CONFIG_OUTPUT_DIRECTORY = "/home/suomi/Desktop/meteor-detect/output_files"
 
 # EDIT start of observation (2000 = 20:00 )
+# USE "xxxx" to don't use scheduler and start immidiatelly
 CONFIG_PLANED_START = "2000"
 
 # EDIT end of observation (0500 = 05:00 )
 CONFIG_PLANED_END = "0500"
 
 # EDIT HOGH_LINES algorithm lines size in mm
-CONFIG_MIN_HOGH_LINES = 30
+CONFIG_MIN_HOGH_LINES = 40
 
 # USE GPU
 CONFIG_USE_OPENCL = False
@@ -52,9 +53,6 @@ CONFIG_HTTP_SERVER_PORT= 9999
 # USE Complex difference function (usually more sensitive)
 CONFIG_USE_COMPLEX_DIFFERENCE = False
 
-# USE Advanced Background extraction method with learning curve (*expermintal)
-CONFIG_USE_BACKGROUND_SUB_METHOD = False
-
 # LOGGING config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [ %(levelname)s ] - %(message)s')
 
@@ -63,7 +61,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - [ %(levelname)s ] 
 # GLOBAL VARIABLE FOR HTTP-SERVER (DON'T TOUCH :P)
 GLOBAL_HTTP_SERVER = None
 
-def get_simple_difference(img_list, mask):
+def get_substract_difference(img_list, mask):
     """
     Computes simple differences between consecutive frames.
 
@@ -84,7 +82,7 @@ def get_simple_difference(img_list, mask):
     return diff_results
 
 
-def get_complex_difference(img_list, mask):
+def get_absdiff_difference(img_list, mask):
     """
     Computes absolute differences between consecutive frames.
     The mask is applied to the *result* of the difference to zero out masked areas.
@@ -164,13 +162,6 @@ class AtomCamera:
 
         self.opencl = opencl
         self.url = video_url
-
-        if CONFIG_USE_BACKGROUND_SUB_METHOD:
-            self.fgbg = cv2.createBackgroundSubtractorMOG2(
-                history=500,        # Number of frames to keep in history
-                varThreshold=16,    # Threshold on the squared Mahalanobis distance to decide if a pixel is foreground
-                detectShadows=True  # Detect and mark shadows (useful for differentiating from meteors)
-            )
 
         self.connect()
         if not self.capture:
@@ -353,10 +344,7 @@ class AtomCamera:
 
             if len(img_list) > 2:
                 self.composite_img = get_brightest(img_list)
-                if CONFIG_USE_BACKGROUND_SUB_METHOD:
-                    self.detect_meteor_with_background_substraction(img_list)
-                else:
-                    self.detect_meteor(img_list)
+                self.detect_meteor(img_list)
 
             # End of session for streaming mode
             now = datetime.now()
@@ -366,27 +354,6 @@ class AtomCamera:
                 break
 
         logging.info("Dequeue streaming thread stopped.")
-
-
-    def process_frame_for_meteor(self, frame):
-        """
-        Processes a single frame using background subtraction and applies mask.
-        """
-        # Apply background subtractor to get a foreground mask
-        # This mask will highlight moving objects
-        fgmask = self.fgbg.apply(frame)
-
-        # Apply the timestamp mask to the foreground mask
-        # Assuming self.mask is 255 for the timestamp area to be ignored
-        # Assuming mask is 3-channel, use one channel for 1-channel fgmask
-        fgmask_no_timestamp = cv2.bitwise_and(fgmask, cv2.bitwise_not(self.mask[:,:,0]))
-
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        fgmask_cleaned = cv2.morphologyEx(fgmask_no_timestamp, cv2.MORPH_OPEN, kernel)
-        fgmask_cleaned = cv2.morphologyEx(fgmask_cleaned, cv2.MORPH_CLOSE, kernel)
-
-        return fgmask_cleaned
-
 
 
     def detect_meteor(self, img_list):
@@ -400,10 +367,10 @@ class AtomCamera:
             return
 
         if CONFIG_USE_COMPLEX_DIFFERENCE:
-            diff_img = get_brightest(get_complex_difference(img_list, self.mask))
+            diff_img = get_brightest(get_substract_difference(img_list, self.mask))
 
         else:
-            diff_img = get_brightest(get_simple_difference(img_list, self.mask))
+            diff_img = get_brightest(get_absdiff_difference(img_list, self.mask))
 
         try:
             detected = detect_hough_lines(diff_img, self.min_length)
@@ -417,68 +384,6 @@ class AtomCamera:
                 else:
                     logging.info(f"Image saved: {image_path}")
 
-                video_path = self.output_dir / f"movie-{filename}.mp4"
-                self.save_movie(img_list, str(video_path))
-
-        except Exception as e:
-            logging.error(f"Exception occurred during meteor detection: {e}")
-
-
-    def detect_meteor_with_background_substraction(self, img_list):
-        """
-        Detect meteors from a list of images using background subtraction.
-        """
-        now = datetime.now()
-
-        if not img_list:
-            logging.debug("No frames in img_list for detection.")
-            return
-
-        # For background subtraction, we typically process frames individually
-        # to update the background model and get foreground masks.
-        # Then, we can sum/average these foreground masks or look for persistence.
-
-        # Let's simplify and just use the last frame's foreground mask for detection
-        # and brightest composite of raw frames for saving.
-
-        # Create a brightest composite of the *original* frames for saving the snapshot
-        self.composite_img = get_brightest(img_list)
-
-        # Get the foreground mask from the *latest* frame (or brightest frame, depending on what you want to detect)
-        # It's usually best to run the background subtractor on all frames
-        # and then aggregate the foreground masks.
-        
-        # A common approach: aggregate the foreground masks
-        # Initialize an empty mask for accumulation
-        accumulated_fg_mask = np.zeros((self.HEIGHT, self.WIDTH), dtype=np.uint8)
-
-        for frame in img_list:
-            # Convert UMat to numpy array if fgbg.apply doesn't handle UMat directly
-            current_frame = frame.get() if self.opencl and isinstance(frame, cv2.UMat) else frame
-            fgmask_for_frame = self.process_frame_for_meteor(current_frame)
-            accumulated_fg_mask = cv2.bitwise_or(accumulated_fg_mask, fgmask_for_frame)
-
-        # Now, accumulated_fg_mask is your "difference" image to detect meteors on
-        # You might apply a threshold to ensure only strong signals remain
-        # ret, final_diff_image = cv2.threshold(accumulated_fg_mask, 127, 255, cv2.THRESH_BINARY)
-        # Or simply pass accumulated_fg_mask to detect, as Canny will threshold.
-
-        try:
-            # Detect meteors in the accumulated foreground mask
-            # The detect function expects a grayscale-like image, which fgmask is
-            detected = detect_hough_lines(accumulated_fg_mask, self.min_length)
-            if detected is not None:
-                logging.info("A possible meteor was detected.")
-
-                # Save detection snapshot
-                filename = now.strftime("%Y%m%d%H%M%S")
-                image_path = self.output_dir / f"{filename}.jpg"
-                if not cv2.imwrite(str(image_path), self.composite_img):
-                    logging.error(f"Failed to save image: {image_path}")
-                else:
-                    logging.info(f"Image saved: {image_path}")
-
-                # Save corresponding video
                 video_path = self.output_dir / f"movie-{filename}.mp4"
                 self.save_movie(img_list, str(video_path))
 
@@ -570,11 +475,11 @@ def initialize():
     if CONFIG_USE_HTTP_SERVER:
         if not isinstance(CONFIG_HTTP_SERVER_PORT, int):
             logging.error(f"Port number '{CONFIG_HTTP_SERVER_PORT}' is not an integer.")
-            sys.exit()
+            raise RuntimeError
         
         if CONFIG_HTTP_SERVER_PORT < 1 or CONFIG_HTTP_SERVER_PORT > 65535:
             logging.error(f"Port number {CONFIG_HTTP_SERVER_PORT} is out of valid range (1-65535).")
-            sys.exit()
+            raise RuntimeError
         
         http_server_thread = threading.Thread(
             target=start_http_server,
@@ -642,17 +547,20 @@ def initialize():
 if __name__ == '__main__':
     if CONFIG_NO_FFMPEG_WARNING:
         os.environ['OPENCV_FFMPEG_LOGLEVEL'] = 'quiet'
-
-    try:
-        dt_object = datetime.strptime(CONFIG_PLANED_START, "%H%M")
-        time_str_hh_mm = dt_object.strftime("%H:%M")
-
-    except ValueError as e:
-        logging.error(f"Error parsing time '{CONFIG_PLANED_START}': {e}")
-        sys.exit()
-
-    schedule.every().day.at(time_str_hh_mm).do(initialize)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
     
+    if CONFIG_PLANED_START == "xxxx":
+        initialize()
+
+    else:
+        try:
+            dt_object = datetime.strptime(CONFIG_PLANED_START, "%H%M")
+            time_str_hh_mm = dt_object.strftime("%H:%M")
+
+        except ValueError as e:
+            logging.error(f"Error parsing time '{CONFIG_PLANED_START}': {e}")
+            raise RuntimeError
+
+        schedule.every().day.at(time_str_hh_mm).do(initialize)
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
