@@ -26,7 +26,7 @@ CONFIG_VIDEOFILE_PATH = None
 CONFIG_EXPOSURE_TIME = 8
 
 # INSERT output file's directory, None == current dir
-CONFIG_OUTPUT_DIRECTORY = "/home/suomi/Desktop/meteor-detect/output_files"
+CONFIG_OUTPUT_DIRECTORY = "/output_files"
 
 # EDIT start of observation (2000 = 20:00 )
 # USE "xxxx" to don't use scheduler and start immidiatelly
@@ -63,54 +63,73 @@ GLOBAL_HTTP_SERVER = None
 
 def get_substract_difference(img_list, mask):
     """
-    Computes simple differences between consecutive frames.
+    Computes simple differences between consecutive frames, with optimization.
+    Applies the mask to the input images via bitwise_or before subtraction.
 
     Args:
       img_list: List of sequential frames
-      mask: Binary mask
+      mask: Binary mask (same size as image, 1-channel or 3-channel)
 
     Returns:
       A list of difference images.
     """
     diff_results = []
-    for img1, img2 in zip(img_list[:-2], img_list[1:]):
-        if mask is not None:
-            img1 = cv2.bitwise_or(img1, mask)
-            img2 = cv2.bitwise_or(img2, mask)
-        diff_results.append(cv2.subtract(img1, img2))
+    num_frames = len(img_list)
+
+    if num_frames < 2:
+        return []
+
+    processed_mask = None
+    if mask is not None:
+        if mask.ndim == 2 and img_list[0].ndim == 3:
+            processed_mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        else:
+            processed_mask = mask
+
+    for i in range(num_frames - 1):
+        img1 = img_list[i]
+        img2 = img_list[i+1]
+
+        if processed_mask is not None:
+            img1 = cv2.bitwise_or(img1, processed_mask) # 
+            img2 = cv2.bitwise_or(img2, processed_mask)
+
+        frame_diff = cv2.subtract(img1, img2) # 
+        diff_results.append(frame_diff)
 
     return diff_results
 
 
 def get_absdiff_difference(img_list, mask):
     """
-    Computes absolute differences between consecutive frames.
-    The mask is applied to the *result* of the difference to zero out masked areas.
-
-    Args:
-      img_list: list of sequential frames (e.g., 3-channel BGR)
-      mask: Binary mask (same size as image, 1-channel or 3-channel, white (255) for areas to keep, black (0) for areas to ignore)
-
-    Returns:
-      A list of absolute difference images.
+    Computes absolute differences between consecutive frames,
+    with optimized mask pre-processing and efficient operations.
     """
+    num_frames = len(img_list)
+    if num_frames <= 1:
+        return []
+
     diff_results = []
-    if mask is not None and mask.ndim == 2:
-        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    
+    inverted_mask = None
+    if mask is not None:
+        if mask.ndim == 2:
+            mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        inverted_mask = cv2.bitwise_not(mask) # 
 
-
-    for i in range(len(img_list) - 1):
+    for i in range(num_frames - 1):
         img1 = img_list[i]
         img2 = img_list[i+1]
 
-        frame_diff = cv2.absdiff(img1, img2)
+        frame_diff = cv2.absdiff(img1, img2) # 
 
-        if mask is not None:
-            frame_diff = cv2.bitwise_and(frame_diff, cv2.bitwise_not(mask))
+        if inverted_mask is not None:
+            frame_diff = cv2.bitwise_and(frame_diff, inverted_mask)
 
         diff_results.append(frame_diff)
 
     return diff_results
+
 
 
 def get_brightest(img_list):
@@ -123,12 +142,9 @@ def get_brightest(img_list):
     Returns:
       Brightest picture
     """
-    output = img_list[0]
-
-    for img in img_list[1:]:
-        output = cv2.max(img, output)
-
-    return output
+    if not img_list:
+        return None
+    return np.maximum.reduce(img_list)
 
 
 def detect_hough_lines(img, length):
@@ -141,8 +157,7 @@ def detect_hough_lines(img, length):
     Returns:
       Detection result
     """
-    blur_size = (5, 5)
-    blur = cv2.GaussianBlur(img, blur_size, 0)
+    blur = cv2.GaussianBlur(img, (5, 5), 0)
     canny = cv2.Canny(blur, 100, 200, 3)
 
     return cv2.HoughLinesP(canny, 1, np.pi/180, 25, minLineLength=length, maxLineGap=5)
@@ -367,10 +382,10 @@ class AtomCamera:
             return
 
         if CONFIG_USE_COMPLEX_DIFFERENCE:
-            diff_img = get_brightest(get_substract_difference(img_list, self.mask))
+            diff_img = get_brightest(get_absdiff_difference(img_list, self.mask))
 
         else:
-            diff_img = get_brightest(get_absdiff_difference(img_list, self.mask))
+            diff_img = get_brightest(get_substract_difference(img_list, self.mask))
 
         try:
             detected = detect_hough_lines(diff_img, self.min_length)
